@@ -1,6 +1,7 @@
 <script lang="ts">
 	import * as Tone from 'tone';
 	import { WebMidi } from 'webmidi';
+	import Octave from './Octave.svelte';
 
 	const sampler = new Tone.Sampler({
 		urls: {
@@ -39,21 +40,37 @@
 		baseUrl: 'https://tonejs.github.io/audio/salamander/'
 	}).toDestination();
 
+	sampler.volume.value = -10;
+
 	const onEnabled = () => {
 		for (const input of WebMidi.inputs) {
 			input.addListener('noteon', (e) => {
-				sampler.triggerAttack(
-					`${e.note.name}${e.note.octave}`,
-					undefined,
+				noteStart(
+					`${e.note.name}${e.note.accidental ?? ''}${e.note.octave}`,
 					//@ts-ignore
 					e.velocity
 				);
 			});
 
 			input.addListener('noteoff', (e) => {
-				sampler.triggerRelease(`${e.note.name}${e.note.octave}`);
+				const note = `${e.note.name}${e.note.accidental ?? ''}${e.note.octave}`;
+				noteStop(note);
 			});
 		}
+	};
+
+	const noteStart = (note: string, velocity: number, color: string = 'red') => {
+		document.getElementById(note)?.style.setProperty('background', color);
+
+		sampler.triggerAttack(note, undefined, velocity);
+	};
+
+	const noteStop = (note: string) => {
+		document
+			.getElementById(note)
+			?.style.setProperty('background', note.includes('#') ? 'black' : 'white');
+
+		sampler.triggerRelease(note);
 	};
 
 	WebMidi.enable()
@@ -66,7 +83,15 @@
 	<meta name="robots" content="noindex nofollow" />
 </svelte:head>
 
-<h1>Welcome to SvelteKit</h1>
-<p>
-	Visit <a href="https://kit.svelte.dev">kit.svelte.dev</a> to read the documentation
-</p>
+<input type="range" min="-20" max="0" bind:value={sampler.volume.value} />
+<div class="piano">
+	{#each [...Array(8).keys()] as octave}
+		<Octave {octave} {noteStart} {noteStop} />
+	{/each}
+</div>
+
+<style>
+	.piano {
+		display: flex;
+	}
+</style>
