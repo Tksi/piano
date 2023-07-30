@@ -2,6 +2,17 @@
 	import * as Tone from 'tone';
 	import { WebMidi } from 'webmidi';
 	import Octave from './Octave.svelte';
+	import { generateRandomHexColor } from '$lib/generateRandomHexColor';
+	import { gameStateR, gameStateW, myUserId } from '$store';
+
+	$: console.log($gameStateR);
+	$: myUserState = $gameStateR.userStates?.get($myUserId)!;
+
+	type StatePublic = { [key: string]: unknown };
+
+	type StateUser = {
+		color: string;
+	};
 
 	const sampler = new Tone.Sampler({
 		urls: {
@@ -59,19 +70,53 @@
 		}
 	};
 
-	const noteStart = (note: string, velocity: number, color: string = 'red') => {
-		document.getElementById(note)?.style.setProperty('background', color);
+	const myColor = generateRandomHexColor();
+	const noteStart = (
+		note: string,
+		velocity: number,
+		color: string = myColor
+	) => {
+		soundStart(note, velocity, color);
 
+		myUserState.note = note;
+		myUserState.velocity = velocity;
+		myUserState.color = myColor;
+		$gameStateW = $gameStateR;
+	};
+
+	const soundStart = (note: string, velocity: number, color: string) => {
+		document.getElementById(note)?.style.setProperty('background', color);
 		sampler.triggerAttack(note, undefined, velocity);
 	};
 
 	const noteStop = (note: string) => {
+		soundStop(note);
+
+		myUserState.note = note;
+		myUserState.velocity = 0;
+		$gameStateW = $gameStateR;
+	};
+
+	const soundStop = (note: string) => {
 		document
 			.getElementById(note)
 			?.style.setProperty('background', note.includes('#') ? 'black' : 'white');
-
 		sampler.triggerRelease(note);
 	};
+
+	$: {
+		if ($gameStateR.userStates) {
+			for (const [userId, userState] of $gameStateR.userStates) {
+				if (userId === $myUserId) continue;
+
+				if (userState.velocity > 0) {
+					soundStart(userState.note, userState.velocity, userState.color);
+				} else {
+					soundStop(userState.note);
+				}
+			}
+		}
+	}
 
 	WebMidi.enable()
 		.then(onEnabled)
@@ -83,15 +128,45 @@
 	<meta name="robots" content="noindex nofollow" />
 </svelte:head>
 
-<input type="range" min="-20" max="0" bind:value={sampler.volume.value} />
-<div class="piano">
-	{#each [...Array(8).keys()] as octave}
-		<Octave {octave} {noteStart} {noteStop} />
-	{/each}
-</div>
+{#if $gameStateR.publicState?.turnUserId}
+	<input type="range" min="-20" max="0" bind:value={sampler.volume.value} />
+	<div class="piano">
+		{#each [...Array(8).keys()] as octave}
+			<Octave {octave} {noteStart} {noteStop} />
+		{/each}
+	</div>
+{:else}
+	<h1>waiting participants... (Share URL)</h1>
+{/if}
+
+{#each $gameStateR.userStates ?? [] as [userId, userState]}
+	<div style:--bgColor={userState?.color}>
+		<div class="color-box" />
+		{`${userState.userName}${userId === $myUserId ? ' (you)' : ''}`}
+	</div>
+{/each}
+
+{#if $gameStateR.publicState?.turnUserId === null}
+	<input
+		type="button"
+		value="start"
+		on:click={() => {
+			$gameStateR.publicState.turnUserId = $myUserId;
+			$gameStateW = $gameStateR;
+		}}
+	/>
+{/if}
 
 <style>
 	.piano {
 		display: flex;
+	}
+
+	.color-box {
+		display: inline-block;
+		width: 10px;
+		height: 10px;
+		background-color: var(--bgColor);
+		display: inline-block;
 	}
 </style>

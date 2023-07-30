@@ -31,7 +31,9 @@
 	},
 	"type": "module",
 	"dependencies": {
+		"nanoid": "^4.0.2",
 		"tone": "^14.7.77",
+		"unique-names-generator": "^4.7.1",
 		"webmidi": "^3.1.6"
 	}
 }
