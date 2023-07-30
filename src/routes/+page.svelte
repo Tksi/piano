@@ -4,15 +4,10 @@
 	import Octave from './Octave.svelte';
 	import { generateRandomHexColor } from '$lib/generateRandomHexColor';
 	import { gameStateR, gameStateW, myUserId } from '$store';
+	import type { UserId } from '$types';
 
-	$: console.log($gameStateR);
 	$: myUserState = $gameStateR.userStates?.get($myUserId)!;
-
-	type StatePublic = { [key: string]: unknown };
-
-	type StateUser = {
-		color: string;
-	};
+	let muteUserIds: UserId[] = [];
 
 	const sampler = new Tone.Sampler({
 		urls: {
@@ -74,9 +69,10 @@
 	const noteStart = (
 		note: string,
 		velocity: number,
-		color: string = myColor
+		color: string = myColor,
+		userId: UserId = $myUserId
 	) => {
-		soundStart(note, velocity, color);
+		soundStart(note, velocity, color, userId);
 
 		myUserState.note = note;
 		myUserState.velocity = velocity;
@@ -84,9 +80,19 @@
 		$gameStateW = $gameStateR;
 	};
 
-	const soundStart = (note: string, velocity: number, color: string) => {
+	const soundStart = (
+		note: string,
+		velocity: number,
+		color: string,
+		userId: UserId
+	) => {
+		console.log();
 		document.getElementById(note)?.style.setProperty('background', color);
-		sampler.triggerAttack(note, undefined, velocity);
+		sampler.triggerAttack(
+			note,
+			undefined,
+			muteUserIds.includes(userId) ? 0 : velocity
+		);
 	};
 
 	const noteStop = (note: string) => {
@@ -110,7 +116,12 @@
 				if (userId === $myUserId) continue;
 
 				if (userState.velocity > 0) {
-					soundStart(userState.note, userState.velocity, userState.color);
+					soundStart(
+						userState.note,
+						userState.velocity,
+						userState.color,
+						userId
+					);
 				} else {
 					soundStop(userState.note);
 				}
@@ -129,7 +140,10 @@
 </svelte:head>
 
 {#if $gameStateR.publicState?.turnUserId}
+	<span>volume</span>
 	<input type="range" min="-20" max="0" bind:value={sampler.volume.value} />
+	<br />
+	<br />
 	<div class="piano">
 		{#each [...Array(8).keys()] as octave}
 			<Octave {octave} {noteStart} {noteStop} />
@@ -139,22 +153,46 @@
 	<h1>waiting participants... (Share URL)</h1>
 {/if}
 
+<br />
 {#each $gameStateR.userStates ?? [] as [userId, userState]}
-	<div style:--bgColor={userState?.color}>
-		<div class="color-box" />
-		{`${userState.userName}${userId === $myUserId ? ' (you)' : ''}`}
+	<!-- svelte-ignore a11y-click-events-have-key-events -->
+	<!-- svelte-ignore a11y-no-static-element-interactions -->
+	<div
+		style="--bgColor={userState?.color}; "
+		on:click={() => {
+			let tmp = new Set(muteUserIds);
+			if (tmp.has(userId)) {
+				tmp.delete(userId);
+			} else {
+				tmp.add(userId);
+			}
+			muteUserIds = [...tmp];
+		}}
+	>
+		<div class="color-box" style:--bgColor={userState?.color} />
+		<span
+			style="user-select:none; text-decoration: {muteUserIds.includes(userId)
+				? 'line-through'
+				: 'none'};"
+		>
+			{`${userState.userName}${userId === $myUserId ? ' (you)' : ''}`}
+		</span>
 	</div>
 {/each}
 
+<br />
 {#if $gameStateR.publicState?.turnUserId === null}
 	<input
 		type="button"
 		value="start"
+		style="margin-left: 50px; width: 75px; height: 30px; font-size: 20px;"
 		on:click={() => {
 			$gameStateR.publicState.turnUserId = $myUserId;
 			$gameStateW = $gameStateR;
 		}}
 	/>
+{:else}
+	<p>Click user name to mute</p>
 {/if}
 
 <style>
